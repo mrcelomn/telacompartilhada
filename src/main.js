@@ -4,7 +4,7 @@ const path = require('path');
 let win, helper;
 
 app.whenReady().then(() => {
-  win = new BrowserWindow({ width: 1280, height: 800, webPreferences: { preload: path.join(__dirname, 'preload.js') } });
+  win = new BrowserWindow({ width: 1280, height: 800, icon: path.join(__dirname, '..', 'build', 'icon.png'), title: 'Tela Compartilhada', backgroundColor: '#0e0f11', webPreferences: { preload: path.join(__dirname, 'preload.js') } });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'index.html'));
 });

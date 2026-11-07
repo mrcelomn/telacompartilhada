@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Tela Compartilhada</title>
+<link rel="icon" href="../build/icon.png">
 <script src="../node_modules/peerjs/dist/peerjs.min.js"></script>
 <style>
   :root {
@@ -14,7 +15,8 @@
   body { margin:0; font-family:"Segoe UI Variable","Segoe UI",system-ui,sans-serif; font-size:14px; background:var(--bg); color:var(--txt); display:flex; flex-direction:column; user-select:none; }
 
   header { display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid var(--borda); flex-wrap:wrap; }
-  .logo { font-weight:600; font-size:15px; margin-right:auto; letter-spacing:-.2px; }
+  .logoImg { width:24px; height:24px; }
+  .logo { display:flex; align-items:center; gap:10px; font-weight:600; font-size:15px; margin-right:auto; letter-spacing:-.2px; }
 
   .grupo { display:flex; align-items:center; gap:8px; }
   .grupo small { color:var(--mut); font-size:12px; }
@@ -103,7 +105,7 @@
 </head>
 <body>
 <header>
-  <div class="logo">Tela Compartilhada</div>
+  <div class="logo"><svg class="logoImg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect x="8" y="8" width="240" height="240" rx="56" fill="#16181b"/><rect x="8.5" y="8.5" width="239" height="239" rx="55.5" fill="none" stroke="#2c3036" stroke-width="3"/><rect x="52" y="66" width="152" height="104" rx="14" fill="none" stroke="#e8e9eb" stroke-width="14"/><path d="M100 196h56" stroke="#e8e9eb" stroke-width="14" stroke-linecap="round"/><path d="M128 172v22" stroke="#e8e9eb" stroke-width="14"/><path d="M116 98 L150 118 L116 138 Z" fill="#3dd68c" stroke="#3dd68c" stroke-width="8" stroke-linejoin="round"/></svg>Tela Compartilhada</div>
   <div class="grupo oculto" id="conta">
     <span class="av" id="avConta"></span><span id="txtConta"></span>
     <button id="btnTrocarNick" class="fantasma" title="Trocar nickname">Trocar</button>

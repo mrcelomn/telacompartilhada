@@ -19,6 +19,7 @@
     "productName": "TelaCompartilhada",
     "files": [
       "src/**",
+      "build/icon.png",
       "node_modules/peerjs/dist/**"
     ],
     "extraResources": [
@@ -28,7 +29,8 @@
       }
     ],
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "icon": "build/icon.ico"
     },
     "portable": {
       "artifactName": "TelaCompartilhada.exe"
