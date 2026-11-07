@@ -1,36 +1,187 @@
 const $ = id => document.getElementById(id);
 const status = t => $('status').textContent = t;
-let peer, conn, telaStream, telaCall, amigoId, audioCtx, worklet;
+const SVG = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICONE_SOM = SVG('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>');
+const ICONE_MUDO = SVG('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>');
 
-peer = new Peer('tela-' + Math.random().toString(36).slice(2, 7));
-peer.on('open', id => { $('meuId').textContent = id; });
-peer.on('error', e => status('Erro: ' + e.type + (e.type === 'peer-unavailable' ? ' (código do amigo não encontrado)' : '')));
-$('meuId').onclick = () => navigator.clipboard.writeText($('meuId').textContent).then(() => status('Código copiado!'));
+// ---------- estado ----------
+let peer = null, souHost = false, hostConn = null, nomeSala = '', meuNome = '';
+const membros = new Map();   // (só no host) peerId -> { nome, conn, transmitindo }
+let lista = [];              // [{ id, nome, host, transmitindo }]
+let telaStream = null;
+const chamadas = new Map();  // peerId -> chamada saindo (minha transmissão)
+const remotos = new Map();   // peerId -> { box, audio }
+let audioCtx, worklet;
 
-peer.on('connection', configurarConexao);
-$('btnConectar').onclick = () => {
-  const id = $('idAmigo').value.trim();
-  if (!id) return status('Digite o código do amigo.');
-  configurarConexao(peer.connect(id, { reliable: true }));
+const slug = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const idDaSala = nome => 'tcsala-' + slug(nome);
+
+// ---------- conta (nickname salvo neste PC) ----------
+const ler = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+const gravar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+meuNome = ler('nome'); $('inSala').value = ler('sala');
+
+function mostrarConta() {
+  const tem = !!meuNome;
+  $('cadastro').classList.toggle('oculto', tem);
+  $('lobby').classList.toggle('oculto', !tem);
+  $('conta').classList.toggle('oculto', !tem); $('sepConta').classList.add('oculto');
+  $('txtConta').textContent = meuNome; $('avConta').textContent = (meuNome[0] || '').toUpperCase();
+  if (!tem) setTimeout(() => $('inNome').focus()); else setTimeout(() => $('inSala').focus());
+}
+$('btnSalvarNick').onclick = () => {
+  const n = $('inNome').value.trim();
+  if (!n) return $('erroNick').textContent = 'Digite um nickname.';
+  meuNome = n; gravar('nome', n); $('erroNick').textContent = ''; mostrarConta();
 };
-function configurarConexao(c) {
-  conn = c; amigoId = c.peer;
-  c.on('open', () => { document.body.classList.add('conectado'); status('Conectado com ' + amigoId + '.'); $('btnTela').disabled = false; });
-  c.on('data', m => { if (m === 'parou-tela') esconderRemota(); });
-  c.on('close', () => { document.body.classList.remove('conectado'); status('Amigo desconectou.'); esconderRemota(); $('btnTela').disabled = true; });
+$('inNome').onkeydown = e => { if (e.key === 'Enter') $('btnSalvarNick').click(); };
+$('btnTrocarNick').onclick = () => { if (peer) sair(''); $('inNome').value = meuNome; meuNome = ''; mostrarConta(); };
+mostrarConta();
+
+// ---------- lobby ----------
+function lerCampos() {
+  nomeSala = $('inSala').value.trim();
+  if (!slug(nomeSala)) return erro('Digite o nome da sala.'), false;
+  gravar('sala', nomeSala);
+  erro(''); travarLobby(true); return true;
+}
+const erro = t => $('erroLobby').textContent = t;
+const travarLobby = v => { $('btnCriar').disabled = v; $('btnEntrar').disabled = v; };
+
+$('btnCriar').onclick = () => {
+  if (!lerCampos()) return;
+  peer = new Peer(idDaSala(nomeSala));
+  peer.on('open', () => {
+    souHost = true;
+    membros.set(peer.id, { nome: meuNome, transmitindo: false });
+    peer.on('connection', aceitarMembro);
+    abrirSala(); enviarLista();
+  });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id') return falhaLobby('Já existe uma sala com esse nome. Clique em Entrar ou escolha outro nome.');
+    tratarErro(e);
+  });
+  configurarChamadas();
+};
+
+$('btnEntrar').onclick = () => {
+  if (!lerCampos()) return;
+  peer = new Peer();
+  peer.on('open', () => {
+    const c = peer.connect(idDaSala(nomeSala), { reliable: true });
+    c.on('open', () => { hostConn = c; c.send({ t: 'ola', nome: meuNome }); abrirSala(); });
+    c.on('data', m => { if (m.t === 'lista') aplicarLista(m.membros); });
+    c.on('close', () => sair('A sala foi fechada pelo dono.'));
+  });
+  peer.on('error', e => {
+    if (e.type === 'peer-unavailable' && !hostConn) return falhaLobby('Sala não encontrada. Confira o nome ou clique em Criar sala.');
+    tratarErro(e);
+  });
+  configurarChamadas();
+};
+$('inSala').onkeydown = e => { if (e.key === 'Enter') $('btnEntrar').click(); };
+
+function falhaLobby(msg) { peer?.destroy(); peer = null; travarLobby(false); erro(msg); }
+function tratarErro(e) {
+  if (!$('sala').classList.contains('oculto')) status('Erro de conexão: ' + e.type);
+  else falhaLobby('Erro de conexão: ' + e.type);
 }
 
-// Recebendo
-peer.on('call', call => {
-  call.answer();
-  call.on('stream', s => {
-    $('vidRemota').srcObject = s;
-    $('audTela').srcObject = s.getAudioTracks().length ? new MediaStream(s.getAudioTracks()) : null;
-    $('boxRemota').classList.remove('oculto'); ajustarLayout();
-  });
-  call.on('close', esconderRemota);
-});
+function abrirSala() {
+  $('lobby').classList.add('oculto'); $('sala').classList.remove('oculto'); $('topoSala').classList.remove('oculto'); $('sepConta').classList.remove('oculto');
+  $('txtSala').innerHTML = ''; $('txtSala').textContent = nomeSala;
+  const sm = document.createElement('small'); sm.textContent = souHost ? 'você é o dono' : ''; $('txtSala').appendChild(sm);
+  document.body.classList.add('conectado');
+  status(souHost ? 'Sala criada. Passe o nome "' + nomeSala + '" pros amigos.' : 'Você entrou na sala.');
+  ajustarLayout();
+}
 
+$('btnSair').onclick = () => sair('');
+function sair(msg) {
+  pararTela();
+  for (const id of [...remotos.keys()]) fecharRemoto(id);
+  peer?.destroy(); peer = null; hostConn = null; souHost = false; membros.clear(); lista = [];
+  document.body.classList.remove('conectado');
+  $('sala').classList.add('oculto'); $('topoSala').classList.add('oculto'); mostrarConta();
+  travarLobby(false); erro(msg);
+}
+
+// ---------- host: controla quem está na sala ----------
+function aceitarMembro(c) {
+  c.on('data', m => {
+    if (m.t === 'ola') { membros.set(c.peer, { nome: String(m.nome).slice(0, 24), conn: c, transmitindo: false }); enviarLista(); }
+    if (m.t === 'transmitindo' && membros.has(c.peer)) { membros.get(c.peer).transmitindo = !!m.on; enviarLista(); }
+  });
+  c.on('close', () => { membros.delete(c.peer); enviarLista(); });
+}
+function enviarLista() {
+  const l = [...membros].map(([id, m]) => ({ id, nome: m.nome, host: id === peer.id, transmitindo: m.transmitindo }));
+  for (const m of membros.values()) if (m.conn?.open) m.conn.send({ t: 'lista', membros: l });
+  aplicarLista(l);
+}
+function avisarTransmissao(on) {
+  if (souHost) { membros.get(peer.id).transmitindo = on; enviarLista(); }
+  else if (hostConn?.open) hostConn.send({ t: 'transmitindo', on });
+}
+
+// ---------- lista de membros ----------
+function aplicarLista(l) {
+  lista = l;
+  const ids = new Set(l.map(m => m.id));
+  // quem saiu ou parou de transmitir
+  for (const id of [...remotos.keys()]) { const m = l.find(x => x.id === id); if (!m || !m.transmitindo) fecharRemoto(id); }
+  for (const [id, ch] of chamadas) if (!ids.has(id)) { ch.close(); chamadas.delete(id); }
+  // se estou transmitindo, mando pra quem chegou agora
+  if (telaStream) for (const m of l) if (m.id !== peer.id && !chamadas.has(m.id)) ligar(m.id);
+  desenharMembros();
+  for (const [id, r] of remotos) { const m = l.find(x => x.id === id); if (m) r.box.querySelector('span').textContent = m.nome; }
+}
+function desenharMembros() {
+  const ul = $('membros'); ul.innerHTML = '';
+  for (const m of lista) {
+    const li = document.createElement('li');
+    const av = document.createElement('span'); av.className = 'av'; av.textContent = (m.nome[0] || '?').toUpperCase();
+    const nm = document.createElement('span'); nm.textContent = m.nome + (m.id === peer?.id ? ' (você)' : '');
+    const tag = document.createElement('span'); tag.className = 'tag' + (m.transmitindo ? ' ao-vivo' : '');
+    tag.textContent = m.transmitindo ? 'ao vivo' : (m.host ? 'dono' : '');
+    li.append(av, nm, tag); ul.appendChild(li);
+  }
+}
+
+// ---------- receber transmissões ----------
+function configurarChamadas() {
+  peer.on('call', call => {
+    call.answer();
+    call.on('stream', s => mostrarRemoto(call.peer, s));
+    call.on('close', () => fecharRemoto(call.peer));
+  });
+}
+function mostrarRemoto(id, stream) {
+  let r = remotos.get(id);
+  if (!r) {
+    const box = document.createElement('div'); box.className = 'box';
+    box.innerHTML = `<span></span><video autoplay muted></video><div class="ctrl"><button class="fantasma"></button><input type="range" min="0" max="100" value="100" title="Volume"></div>`;
+    const audio = new Audio(); audio.autoplay = true;
+    const btn = box.querySelector('button'), vol = box.querySelector('input'), video = box.querySelector('video');
+    const atualizar = () => { const mudo = audio.muted || audio.volume === 0; btn.innerHTML = mudo ? ICONE_MUDO + 'Mudo' : ICONE_SOM + 'Som'; btn.className = mudo ? 'red' : 'fantasma'; };
+    btn.onclick = () => { audio.muted = !audio.muted; atualizar(); };
+    vol.oninput = () => { audio.volume = vol.value / 100; if (vol.value > 0) audio.muted = false; atualizar(); };
+    video.ondblclick = () => video.requestFullscreen();
+    atualizar();
+    $('main').prepend(box);
+    r = { box, audio, video }; remotos.set(id, r);
+  }
+  r.box.querySelector('span').textContent = lista.find(m => m.id === id)?.nome || 'Transmissão';
+  r.video.srcObject = stream;
+  r.audio.srcObject = stream.getAudioTracks().length ? new MediaStream(stream.getAudioTracks()) : null;
+  ajustarLayout();
+}
+function fecharRemoto(id) {
+  const r = remotos.get(id); if (!r) return;
+  r.video.srcObject = null; r.audio.srcObject = null; r.box.remove(); remotos.delete(id); ajustarLayout();
+}
+
+// ---------- transmitir ----------
 // Escolher janela
 $('btnTela').onclick = async () => {
   if (telaStream) return pararTela();
@@ -58,73 +209,69 @@ async function compartilhar(f) {
   let temSom = false;
   const escolha = $('selAudio').value;
   if (escolha !== '0' && (escolha || f.id.startsWith('window:'))) {
-    const track = await iniciarAudioApp();
-    temSom = await nativo.audioIniciar(f.id, escolha);
-    if (temSom) telaStream.addTrack(track);
+    try {
+      const track = await iniciarAudioApp();
+      temSom = await nativo.audioIniciar(f.id, escolha);
+      if (temSom) telaStream.addTrack(track);
+    } catch (e) { console.error(e); }
   }
   $('vidLocal').srcObject = telaStream;
   $('boxLocal').classList.remove('oculto'); ajustarLayout();
-  telaCall = peer.call(amigoId, telaStream);
+  for (const m of lista) if (m.id !== peer.id) ligar(m.id);
+  avisarTransmissao(true);
   $('btnTela').textContent = 'Parar'; $('btnTela').className = 'red';
-  status('Compartilhando "' + f.name + '"' + (temSom ? ' com o som só desse programa.' : ' sem som.'));
+  status('Transmitindo "' + f.name + '"' + (temSom ? ' com o som só desse programa.' : ' sem som.'));
 }
+function ligar(id) { chamadas.set(id, peer.call(id, telaStream, { metadata: { nome: meuNome } })); }
 
 // Áudio do programa: PCM 48kHz 16-bit estéreo vindo do audio-app.exe -> track WebRTC
-const WORKLET = `
-class P extends AudioWorkletProcessor {
-  constructor() { super(); this.b = new Float32Array(48000 * 4); this.r = 0; this.w = 0; this.n = 0;
-    this.port.onmessage = e => { const s = new Int16Array(e.data), L = this.b.length;
-      for (let i = 0; i < s.length; i++) { this.b[this.w] = s[i] / 32768; this.w = (this.w + 1) % L; }
-      this.n = Math.min(this.n + s.length, L);
-      if (this.n > 48000 * 2 * 0.25) { const drop = this.n - 9600; this.r = (this.r + drop) % L; this.n -= drop; } }; }
-  process(_, outs) { const o = outs[0], L = this.b.length;
-    for (let i = 0; i < o[0].length; i++) {
-      if (this.n >= 2) { o[0][i] = this.b[this.r]; o[1][i] = this.b[(this.r + 1) % L]; this.r = (this.r + 2) % L; this.n -= 2; }
-      else { o[0][i] = 0; o[1][i] = 0; } }
-    return true; } }
-registerProcessor('p', P);`;
+// (ScriptProcessor em vez de AudioWorklet: worklet não carrega em página file://)
+const RING = new Float32Array(48000 * 4); let rR = 0, rW = 0, rN = 0;
+function empurrarAudio(d) {
+  const s = new Int16Array(d.slice().buffer), L = RING.length;
+  for (let i = 0; i < s.length; i++) { RING[rW] = s[i] / 32768; rW = (rW + 1) % L; }
+  rN = Math.min(rN + s.length, L);
+  if (rN > 48000 * 2 * 0.25) { const drop = rN - 9600; rR = (rR + drop) % L; rN -= drop; } // segura atraso < 250ms
+}
+let destAudio;
 async function iniciarAudioApp() {
   if (!audioCtx) {
     audioCtx = new AudioContext({ sampleRate: 48000 });
-    await audioCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })));
-    worklet = new AudioWorkletNode(audioCtx, 'p', { outputChannelCount: [2] });
-    nativo.onAudio(d => { const c = d.slice(); worklet.port.postMessage(c.buffer, [c.buffer]); });
+    const proc = audioCtx.createScriptProcessor(1024, 0, 2);
+    proc.onaudioprocess = e => {
+      const l = e.outputBuffer.getChannelData(0), r = e.outputBuffer.getChannelData(1), L = RING.length;
+      for (let i = 0; i < l.length; i++) {
+        if (rN >= 2) { l[i] = RING[rR]; r[i] = RING[(rR + 1) % L]; rR = (rR + 2) % L; rN -= 2; } else { l[i] = 0; r[i] = 0; }
+      }
+    };
+    destAudio = audioCtx.createMediaStreamDestination();
+    proc.connect(destAudio);
+    worklet = proc;
+    nativo.onAudio(empurrarAudio);
     nativo.onAudioFim(c => { if (c) status('Captura de áudio parou (código ' + c + '). Precisa Windows 10 2004+ / 11.'); });
   }
-  const dest = audioCtx.createMediaStreamDestination();
-  worklet.disconnect(); worklet.connect(dest);
-  return dest.stream.getAudioTracks()[0];
+  await audioCtx.resume();
+  rR = rW = rN = 0;
+  return destAudio.stream.getAudioTracks()[0].clone();
 }
 
 function pararTela() {
+  if (!telaStream) return;
   nativo.audioParar();
-  telaStream?.getTracks().forEach(t => t.stop());
-  telaStream = null; telaCall?.close(); telaCall = null;
-  conn?.open && conn.send('parou-tela');
+  telaStream.getTracks().forEach(t => t.stop());
+  telaStream = null;
+  for (const ch of chamadas.values()) ch.close();
+  chamadas.clear();
+  avisarTransmissao(false);
+  $('vidLocal').srcObject = null;
   $('boxLocal').classList.add('oculto'); ajustarLayout();
   $('btnTela').textContent = 'Compartilhar'; $('btnTela').className = 'grn';
-  status('Parou de compartilhar.');
+  status('Parou de transmitir.');
 }
-function esconderRemota() {
-  $('vidRemota').srcObject = null; $('audTela').srcObject = null;
-  $('boxRemota').classList.add('oculto'); ajustarLayout();
-}
+
 function ajustarLayout() {
-  const n = document.querySelectorAll('.box:not(.oculto)').length;
+  const n = document.querySelectorAll('#main .box:not(.oculto)').length;
   $('main').classList.toggle('dois', n === 2);
+  $('main').classList.toggle('varios', n > 2);
   $('vazio').classList.toggle('oculto', n > 0);
 }
-$('vidRemota').ondblclick = () => $('vidRemota').requestFullscreen();
-
-// Mutar / volume da transmissão que você está assistindo
-function atualizarSom() {
-  const a = $('audTela'), mudo = a.muted || a.volume === 0;
-  $('btnMudo').innerHTML = (mudo ? ICONE_MUDO + 'Mudo' : ICONE_SOM + 'Som');
-  $('btnMudo').className = mudo ? 'red' : 'fantasma';
-}
-const SVG = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
-const ICONE_SOM = SVG('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>');
-const ICONE_MUDO = SVG('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>');
-atualizarSom();
-$('btnMudo').onclick = () => { $('audTela').muted = !$('audTela').muted; atualizarSom(); };
-$('volume').oninput = e => { $('audTela').volume = e.target.value / 100; if (e.target.value > 0) $('audTela').muted = false; atualizarSom(); };

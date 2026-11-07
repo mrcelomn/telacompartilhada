@@ -40,6 +40,7 @@
 
   main { display:grid; gap:12px; padding:0 20px 20px; align-content:start; }
   main.dois { grid-template-columns:1fr 1fr; }
+  main.varios { grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); }
   .box { background:#000; border-radius:8px; position:relative; overflow:hidden; border:1px solid var(--borda); }
   .box > span { position:absolute; top:10px; left:10px; background:#000000b3; padding:3px 8px; border-radius:4px; font-size:11px; color:#cfd1d4; z-index:1; }
   video { width:100%; max-height:calc(100vh - 150px); display:block; background:#000; }
@@ -70,39 +71,91 @@
   .fonte div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:0 2px; color:#cfd1d4; }
   .rodapePicker { display:flex; justify-content:flex-end; }
 
+
+  /* lobby */
+  #lobby, #cadastro { flex:1; display:grid; place-items:center; padding:40px 20px; }
+  .cartao { width:min(380px,100%); background:var(--sup); border:1px solid var(--borda); border-radius:10px; padding:24px; }
+  .cartao h2 { margin:0 0 4px; font-size:17px; font-weight:600; }
+  .cartao p { margin:0 0 18px; color:var(--mut); font-size:12px; }
+  .campo { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+  .campo label { font-size:12px; color:var(--mut); }
+  .campo input { width:100%; }
+  .acoes { display:flex; gap:8px; margin-top:6px; }
+  .acoes button { flex:1; justify-content:center; padding:9px 14px; }
+  .erro { color:var(--red); font-size:12px; min-height:16px; margin-top:12px; }
+
+  /* sala */
+  #sala { flex:1; display:flex; min-height:0; }
+  #palco { flex:1; display:flex; flex-direction:column; min-width:0; }
+  aside { width:220px; border-left:1px solid var(--borda); padding:16px; flex:none; overflow:auto; }
+  aside h4 { margin:0 0 10px; font-size:11px; font-weight:600; color:var(--mut); text-transform:uppercase; letter-spacing:.6px; }
+  #membros { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px; }
+  #membros li { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:13px; }
+  #membros li:hover { background:var(--sup); }
+  .av, #membros .av { width:22px; height:22px; border-radius:50%; background:var(--sup2); border:1px solid var(--borda); display:grid; place-items:center; font-size:11px; font-weight:600; color:var(--mut); flex:none; }
+  #membros .tag { margin-left:auto; font-size:10px; color:var(--mut); }
+  #membros .ao-vivo { color:var(--red); }
+  .nomeSala { font-weight:600; }
+  .nomeSala small { color:var(--mut); font-weight:400; margin-left:6px; }
+
   ::-webkit-scrollbar { width:8px; } ::-webkit-scrollbar-thumb { background:var(--borda); border-radius:8px; }
 </style>
 </head>
 <body>
 <header>
   <div class="logo">Tela Compartilhada</div>
-  <div class="grupo"><small>Seu código</small><b id="meuId" title="Clique para copiar">...</b></div>
-  <span class="sep"></span>
-  <div class="grupo">
-    <input id="idAmigo" placeholder="Código do amigo" spellcheck="false">
-    <button id="btnConectar">Conectar</button>
+  <div class="grupo oculto" id="conta">
+    <span class="av" id="avConta"></span><span id="txtConta"></span>
+    <button id="btnTrocarNick" class="fantasma" title="Trocar nickname">Trocar</button>
   </div>
-  <span class="sep"></span>
-  <button id="btnTela" class="grn" disabled>Compartilhar</button>
+  <span class="sep oculto" id="sepConta"></span>
+  <div class="grupo oculto" id="topoSala">
+    <span class="nomeSala" id="txtSala"></span>
+    <span class="sep"></span>
+    <button id="btnTela" class="grn">Compartilhar</button>
+    <button id="btnSair" class="fantasma">Sair</button>
+  </div>
 </header>
-<div id="barraStatus"><span class="ponto"></span><span id="status">Desconectado</span></div>
 
-<div id="vazio"><div>
-  <h2>Nada sendo transmitido</h2>
-  <div>Compartilhe uma janela com o som só daquele programa.</div>
-  <ol>
-    <li>Mande <b>seu código</b> pro amigo (clique nele pra copiar)</li>
-    <li>Um dos dois cola o código e clica em <b>Conectar</b></li>
-    <li>Clique em <b>Compartilhar</b> e escolha a janela</li>
-  </ol>
-</div></div>
+<div id="cadastro" class="oculto">
+  <div class="cartao">
+    <h2>Escolha seu nickname</h2>
+    <p>É assim que seus amigos vão te ver. Fica salvo neste PC.</p>
+    <div class="campo"><label for="inNome">Nickname</label><input id="inNome" maxlength="24" placeholder="Ex.: marcelo" spellcheck="false"></div>
+    <div class="acoes"><button id="btnSalvarNick">Continuar</button></div>
+    <div id="erroNick" class="erro"></div>
+  </div>
+</div>
 
-<main id="main">
-  <div class="box oculto" id="boxRemota"><span>Ao vivo</span><video id="vidRemota" autoplay muted></video>
-    <div class="ctrl"><button id="btnMudo" class="fantasma"></button><input type="range" id="volume" min="0" max="100" value="100" title="Volume"></div></div>
-  <div class="box oculto" id="boxLocal"><span>Você está transmitindo</span><video id="vidLocal" autoplay muted></video></div>
-</main>
-<audio id="audTela" autoplay></audio>
+<div id="lobby" class="oculto">
+  <div class="cartao">
+    <h2>Entrar numa sala</h2>
+    <p>Crie uma sala e passe o nome dela pros amigos.</p>
+    <div class="campo"><label for="inSala">Nome da sala</label><input id="inSala" maxlength="40" placeholder="Ex.: cinema-da-galera" spellcheck="false"></div>
+    <div class="acoes">
+      <button id="btnCriar">Criar sala</button>
+      <button id="btnEntrar" class="fantasma">Entrar</button>
+    </div>
+    <div id="erroLobby" class="erro"></div>
+  </div>
+</div>
+
+<div id="sala" class="oculto">
+  <div id="palco">
+    <div id="barraStatus"><span class="ponto"></span><span id="status"></span></div>
+    <div id="vazio"><div>
+      <h2>Ninguém está transmitindo</h2>
+      <div>Clique em <b>Compartilhar</b> e escolha uma janela.<br>Só o som daquele programa vai junto.</div>
+    </div></div>
+    <main id="main">
+      <div class="box oculto" id="boxLocal"><span>Você está transmitindo</span><video id="vidLocal" autoplay muted></video></div>
+    </main>
+  </div>
+  <aside>
+    <h4>Na sala</h4>
+    <ul id="membros"></ul>
+  </aside>
+</div>
 
 <div id="picker" class="oculto"><div>
   <div class="topoPicker">
