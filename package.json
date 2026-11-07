@@ -1,0 +1,16 @@
+{
+  "name": "tela-compartilhada",
+  "version": "1.0.0",
+  "description": "Compartilhar uma janela + só o áudio dela",
+  "main": "main.js",
+  "scripts": { "start": "electron .", "dist": "electron-builder --win portable --publish never" },
+  "dependencies": { "peerjs": "1.5.4" },
+  "devDependencies": { "electron": "33.2.1", "electron-builder": "25.1.8" },
+  "build": {
+    "appId": "tela.compartilhada",
+    "productName": "TelaCompartilhada",
+    "files": ["main.js", "preload.js", "index.html", "renderer.js", "node_modules/peerjs/dist/**"],
+    "extraResources": [{ "from": "native/audio-app.exe", "to": "audio-app.exe" }],
+    "win": { "target": "portable" }
+  }
+}

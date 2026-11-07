@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Tela Compartilhada</title>
+<script src="node_modules/peerjs/dist/peerjs.min.js"></script>
+<style>
+  :root {
+    --bg:#0e0f11; --sup:#16181b; --sup2:#1d2024; --borda:#272a30;
+    --txt:#e8e9eb; --mut:#7d828c; --acc:#e8e9eb; --red:#e5484d; --grn:#3dd68c;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family:"Segoe UI Variable","Segoe UI",system-ui,sans-serif; font-size:14px; background:var(--bg); color:var(--txt); display:flex; flex-direction:column; user-select:none; }
+
+  header { display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid var(--borda); flex-wrap:wrap; }
+  .logo { font-weight:600; font-size:15px; margin-right:auto; letter-spacing:-.2px; }
+
+  .grupo { display:flex; align-items:center; gap:8px; }
+  .grupo small { color:var(--mut); font-size:12px; }
+  .sep { width:1px; height:22px; background:var(--borda); margin:0 6px; }
+  #meuId { font-family:"Cascadia Mono",Consolas,monospace; font-weight:500; font-size:13px; padding:7px 10px; border-radius:6px; cursor:pointer; border:1px solid var(--borda); background:var(--sup); }
+  #meuId:hover { border-color:#3a3e46; }
+
+  input { background:var(--sup); color:var(--txt); border:1px solid var(--borda); border-radius:6px; padding:7px 10px; font-size:13px; width:150px; outline:none; font-family:inherit; }
+  input:focus { border-color:#4a4f58; }
+
+  button { background:var(--txt); color:#0e0f11; border:1px solid transparent; border-radius:6px; padding:7px 14px; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:6px; }
+  button:hover:not(:disabled) { opacity:.88; }
+  button:disabled { opacity:.3; cursor:not-allowed; }
+  button.grn { background:var(--txt); color:#0e0f11; }
+  button.red { background:transparent; color:var(--red); border-color:#5a2a2c; }
+  button.fantasma { background:transparent; color:var(--txt); border-color:var(--borda); }
+  button.fantasma:hover { background:var(--sup2); opacity:1; }
+  svg { width:15px; height:15px; flex:none; }
+
+  #barraStatus { display:flex; align-items:center; gap:8px; padding:10px 20px; color:var(--mut); font-size:12px; }
+  #barraStatus .ponto { width:6px; height:6px; border-radius:50%; background:#4a4f58; flex:none; }
+  body.conectado #barraStatus .ponto { background:var(--grn); }
+
+  main { display:grid; gap:12px; padding:0 20px 20px; align-content:start; }
+  main.dois { grid-template-columns:1fr 1fr; }
+  .box { background:#000; border-radius:8px; position:relative; overflow:hidden; border:1px solid var(--borda); }
+  .box > span { position:absolute; top:10px; left:10px; background:#000000b3; padding:3px 8px; border-radius:4px; font-size:11px; color:#cfd1d4; z-index:1; }
+  video { width:100%; max-height:calc(100vh - 150px); display:block; background:#000; }
+
+  .ctrl { position:absolute; bottom:10px; left:10px; display:flex; gap:10px; align-items:center; background:#000000b3; padding:5px 10px 5px 5px; border-radius:6px; opacity:0; transition:opacity .15s; }
+  .box:hover .ctrl { opacity:1; }
+  .ctrl button { padding:5px 10px; font-size:12px; }
+  .ctrl input[type=range] { width:110px; padding:0; border:0; background:none; accent-color:var(--txt); }
+
+  #vazio { flex:1; display:grid; place-items:center; color:var(--mut); padding:40px 20px; }
+  #vazio h2 { color:var(--txt); margin:0 0 6px; font-size:17px; font-weight:600; }
+  #vazio ol { margin:16px 0 0; padding-left:18px; line-height:2; font-size:13px; }
+  #vazio b { color:var(--txt); font-weight:500; }
+
+  .oculto { display:none !important; }
+
+  #picker { position:fixed; inset:0; background:#000000b3; display:flex; align-items:center; justify-content:center; z-index:10; }
+  #picker > div { background:var(--sup); border:1px solid var(--borda); border-radius:10px; padding:20px; width:min(940px,94vw); max-height:88vh; overflow:auto; }
+  .topoPicker { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .topoPicker h3 { margin:0; font-size:15px; font-weight:600; margin-right:auto; }
+  #picker p { color:var(--mut); font-size:12px; margin:4px 0 14px; }
+  select { background:var(--sup2); color:var(--txt); border:1px solid var(--borda); border-radius:6px; padding:6px 8px; font-size:12px; font-family:inherit; outline:none; }
+  .rotulo { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--mut); }
+  #lista { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; margin:14px 0; }
+  .fonte { border-radius:8px; padding:6px; cursor:pointer; font-size:12px; border:1px solid var(--borda); }
+  .fonte:hover { border-color:#4a4f58; background:var(--sup2); }
+  .fonte img { width:100%; aspect-ratio:16/9; object-fit:contain; background:#000; border-radius:5px; display:block; margin-bottom:6px; }
+  .fonte div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:0 2px; color:#cfd1d4; }
+  .rodapePicker { display:flex; justify-content:flex-end; }
+
+  ::-webkit-scrollbar { width:8px; } ::-webkit-scrollbar-thumb { background:var(--borda); border-radius:8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Tela Compartilhada</div>
+  <div class="grupo"><small>Seu código</small><b id="meuId" title="Clique para copiar">...</b></div>
+  <span class="sep"></span>
+  <div class="grupo">
+    <input id="idAmigo" placeholder="Código do amigo" spellcheck="false">
+    <button id="btnConectar">Conectar</button>
+  </div>
+  <span class="sep"></span>
+  <button id="btnTela" class="grn" disabled>Compartilhar</button>
+</header>
+<div id="barraStatus"><span class="ponto"></span><span id="status">Desconectado</span></div>
+
+<div id="vazio"><div>
+  <h2>Nada sendo transmitido</h2>
+  <div>Compartilhe uma janela com o som só daquele programa.</div>
+  <ol>
+    <li>Mande <b>seu código</b> pro amigo (clique nele pra copiar)</li>
+    <li>Um dos dois cola o código e clica em <b>Conectar</b></li>
+    <li>Clique em <b>Compartilhar</b> e escolha a janela</li>
+  </ol>
+</div></div>
+
+<main id="main">
+  <div class="box oculto" id="boxRemota"><span>Ao vivo</span><video id="vidRemota" autoplay muted></video>
+    <div class="ctrl"><button id="btnMudo" class="fantasma"></button><input type="range" id="volume" min="0" max="100" value="100" title="Volume"></div></div>
+  <div class="box oculto" id="boxLocal"><span>Você está transmitindo</span><video id="vidLocal" autoplay muted></video></div>
+</main>
+<audio id="audTela" autoplay></audio>
+
+<div id="picker" class="oculto"><div>
+  <div class="topoPicker">
+    <h3>O que você quer compartilhar?</h3>
+    <label class="rotulo">Som de <select id="selAudio"></select></label>
+  </div>
+  <p>Só o som do programa escolhido é enviado. O Discord nunca entra.</p>
+  <div id="lista"></div>
+  <div class="rodapePicker"><button id="btnCancelar" class="fantasma">Cancelar</button></div>
+</div></div>
+<script src="renderer.js"></script>
+</body>
+</html>
