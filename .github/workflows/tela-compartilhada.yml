@@ -21,12 +21,12 @@ jobs:
           name: TelaCompartilhada-windows
           path: TelaCompartilhada.zip
       - name: Guardar zip numa ref oculta (não aparece como branch)
+        shell: bash
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          $blob = git hash-object -w TelaCompartilhada.zip
-          "100644 blob $blob`tTelaCompartilhada.zip" | git mktree > tree.txt
-          $tree = Get-Content tree.txt
-          $commit = git commit-tree $tree -m "zip"
-          git push -f origin "${commit}:refs/builds/zip"
+          blob=$(git hash-object -w TelaCompartilhada.zip)
+          tree=$(printf '100644 blob %s\tTelaCompartilhada.zip\n' "$blob" | git mktree)
+          commit=$(git commit-tree "$tree" -m zip)
+          git push -f origin "$commit:refs/builds/zip"
     permissions: { contents: write }
