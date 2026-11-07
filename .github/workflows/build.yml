@@ -1,0 +1,38 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md', 'docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Compilar captura de áudio
+        run: cl /nologo /EHsc /O2 /std:c++17 /DUNICODE /D_UNICODE native\audio-app.cpp /Fe:native\audio-app.exe
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install
+      - run: npm run dist
+
+      - name: Zipar
+        run: Compress-Archive -Path dist\TelaCompartilhada.exe -DestinationPath dist\TelaCompartilhada.zip
+
+      - name: Publicar em Releases
+        shell: bash
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest dist/TelaCompartilhada.exe dist/TelaCompartilhada.zip \
+            --target "${{ github.sha }}" --latest \
+            --title "Tela Compartilhada" \
+            --notes "Baixe o **TelaCompartilhada.exe** (ou o .zip) e abra. Não precisa instalar. Windows 10 2004+ ou Windows 11."

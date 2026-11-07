@@ -1,15 +1,34 @@
 # Tela Compartilhada
 
-App pra Windows: crie uma sala, seus amigos entram pelo nome dela, e qualquer um compartilha **uma janela** com **só o som daquele programa** (o Discord fica de fora, sem eco). Sem microfone.
+Crie uma sala, chame os amigos e compartilhe a janela de um programa **com o som só dele**: o Discord fica de fora, sem eco.
 
-## Usar
-1. Na primeira vez, escolha seu **nickname** (fica salvo).
-2. Um cria a sala (ex.: `cinema-da-galera`); os outros digitam o mesmo nome e clicam **Entrar**.
-3. **Compartilhar** → escolha a janela. Para sair, **Sair**.
+### [Baixar para Windows](../../releases/latest/download/TelaCompartilhada.exe)
 
-Funciona bem com até ~4 pessoas assistindo (a transmissão sai direto do PC de quem compartilha). Se o dono da sala sair, a sala fecha.
+Não precisa instalar: é só abrir o `.exe`. Mande o mesmo arquivo pros seus amigos.
 
-## Baixar
-Aba **Actions** → última execução verde → artefato `TelaCompartilhada-windows`.
+![Sala com transmissão](docs/sala.png)
 
-Requer Windows 10 versão 2004+ ou Windows 11.
+## Como usar
+
+1. Abra o programa e escolha seu **nickname** (fica salvo).
+2. Digite um nome de sala e clique em **Criar sala**.
+3. Seus amigos digitam o mesmo nome e clicam em **Entrar**.
+4. Clique em **Compartilhar** e escolha a janela. Só o som daquele programa vai junto.
+
+Para sair, clique em **Sair**. Se o dono sair, a sala fecha.
+
+## Bom saber
+
+- Precisa de **Windows 10 (versão 2004+) ou Windows 11**.
+- Se aparecer "O Windows protegeu o computador", clique em **Mais informações → Executar assim mesmo**. O aviso aparece porque o programa não tem assinatura digital.
+- Funciona melhor com até **4 pessoas assistindo**: a transmissão sai direto do PC de quem compartilha.
+- Não usa microfone. Conversem pelo Discord normalmente.
+
+## Para desenvolvedores
+
+```
+npm install
+npm start
+```
+
+A captura de áudio por programa fica em `native/audio-app.cpp` (WASAPI process loopback). O build do Windows roda no GitHub Actions e publica o `.exe` em Releases a cada push na `main`.

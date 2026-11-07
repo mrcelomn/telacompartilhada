@@ -6,7 +6,7 @@ let win, helper;
 app.whenReady().then(() => {
   win = new BrowserWindow({ width: 1280, height: 800, webPreferences: { preload: path.join(__dirname, 'preload.js') } });
   win.setMenuBarVisibility(false);
-  win.loadFile('index.html');
+  win.loadFile(path.join(__dirname, 'index.html'));
 });
 
 ipcMain.handle('fontes', async () =>
@@ -14,7 +14,7 @@ ipcMain.handle('fontes', async () =>
     .map(s => ({ id: s.id, name: s.name, thumb: s.thumbnail.toDataURL() })));
 
 // Inicia captura de áudio SÓ do processo dono da janela escolhida
-const exe = () => app.isPackaged ? path.join(process.resourcesPath, 'audio-app.exe') : path.join(__dirname, 'native', 'audio-app.exe');
+const exe = () => app.isPackaged ? path.join(process.resourcesPath, 'audio-app.exe') : path.join(__dirname, '..', 'native', 'audio-app.exe');
 
 // Programas que estão usando áudio agora
 ipcMain.handle('apps-audio', () => new Promise(res => {
