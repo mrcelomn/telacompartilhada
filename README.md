@@ -2,10 +2,9 @@
 
 # Tela Compartilhada
 
-**Assista junto com os amigos, com o som só do programa que você escolher.**
+**Compartilhe sua tela com os amigos.**
 
-Crie uma sala, chame a galera e compartilhe a janela de um filme, jogo ou vídeo.
-O áudio da call do Discord fica de fora, então ninguém escuta eco.
+Crie uma sala, chame a galera e transmita qualquer janela do seu PC, com som.
 
 <br>
 
@@ -30,7 +29,7 @@ O áudio da call do Discord fica de fora, então ninguém escuta eco.
 | **1. Escolha um nickname** | Na primeira vez que abrir. Fica salvo no seu PC. |
 | **2. Crie uma sala** | Digite um nome, tipo `cinema-da-galera`, e clique em **Criar sala**. |
 | **3. Chame os amigos** | Eles digitam o mesmo nome e clicam em **Entrar**. |
-| **4. Compartilhe** | Clique em **Compartilhar** e escolha a janela. Só o som daquele programa vai junto. |
+| **4. Compartilhe** | Clique em **Compartilhar** e escolha a janela ou a tela inteira. |
 
 Para sair, clique em **Sair**. Se o dono sair, a sala fecha pra todo mundo.
 
@@ -38,11 +37,11 @@ Para sair, clique em **Sair**. Se o dono sair, a sala fecha pra todo mundo.
 
 ## O que ele faz
 
-- **Som só do programa:** você escolhe a janela e o áudio vem só dela. Discord, notificações e o resto do PC ficam de fora.
-- **Salas com nome:** sem código esquisito, é só combinar o nome da sala.
+- **Salas com nome:** é só combinar o nome da sala com os amigos.
+- **Com som:** o áudio do programa compartilhado vai junto.
 - **Qualquer um transmite:** todo mundo na sala pode compartilhar a própria tela.
 - **Controle de volume:** cada transmissão tem mudo e volume próprios.
-- **Sem microfone:** a conversa continua no Discord, o programa cuida só da tela e do som.
+- **Leve:** não precisa instalar nem criar conta.
 
 <br>
 
@@ -90,5 +89,5 @@ npm start
 | Pasta | O que tem |
 |---|---|
 | `src/` | App Electron (interface, salas via WebRTC/PeerJS) |
-| `native/` | Captura de áudio por programa (WASAPI process loopback) |
+| `native/` | Captura de áudio (WASAPI) |
 | `.github/workflows/` | Build do Windows, publica o `.exe` em Releases a cada push na `main` |
