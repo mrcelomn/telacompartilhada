@@ -5,7 +5,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable --publish never"
+    "dist": "electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "peerjs": "1.5.4"
@@ -29,11 +29,20 @@
       }
     ],
     "win": {
-      "target": "portable",
+      "target": "nsis",
       "icon": "build/icon.ico"
     },
-    "portable": {
-      "artifactName": "TelaCompartilhada.exe"
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tela Compartilhada",
+      "artifactName": "TelaCompartilhada-Setup.exe",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "uninstallDisplayName": "Tela Compartilhada"
     }
   }
 }

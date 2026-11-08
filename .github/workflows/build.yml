@@ -25,14 +25,14 @@ jobs:
       - run: npm run dist
 
       - name: Zipar
-        run: Compress-Archive -Path dist\TelaCompartilhada.exe -DestinationPath dist\TelaCompartilhada.zip
+        run: Compress-Archive -Path dist\TelaCompartilhada-Setup.exe -DestinationPath dist\TelaCompartilhada.zip
 
       - name: Publicar em Releases
         shell: bash
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest dist/TelaCompartilhada.exe dist/TelaCompartilhada.zip \
+          gh release create latest dist/TelaCompartilhada-Setup.exe dist/TelaCompartilhada.zip \
             --target "${{ github.sha }}" --latest \
             --title "Tela Compartilhada" \
-            --notes "Baixe o **TelaCompartilhada.exe** (ou o .zip) e abra. Não precisa instalar. Windows 10 2004+ ou Windows 11."
+            --notes "Baixe o **TelaCompartilhada-Setup.exe** e abra: instala em segundos e já abre o programa. Windows 10 2004+ ou Windows 11."
