@@ -3,6 +3,9 @@ const { spawn, execFile } = require('child_process');
 const path = require('path');
 let win, helper;
 
+// Mesmo ID dos atalhos criados pelo instalador: o Windows usa pra achar o ícone da barra de tarefas
+app.setAppUserModelId('tela.compartilhada');
+
 app.whenReady().then(() => {
   win = new BrowserWindow({ width: 1280, height: 800, icon: path.join(__dirname, '..', 'build', 'icon.png'), title: 'Tela Compartilhada', backgroundColor: '#0e0f11', webPreferences: { preload: path.join(__dirname, 'preload.js') } });
   win.setMenuBarVisibility(false);
