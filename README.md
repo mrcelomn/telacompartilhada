@@ -43,6 +43,7 @@ Para sair, clique em **Sair**. Se o dono sair, a sala fecha pra todo mundo.
 - **Salas com nome:** é só combinar o nome da sala com os amigos.
 - **Com som:** o áudio do programa compartilhado vai junto.
 - **Qualquer um transmite:** todo mundo na sala pode compartilhar a própria tela.
+- **Câmera:** clique em **Câmera** pra aparecer pros amigos, junto ou não com a tela.
 - **Controle de volume:** cada transmissão tem mudo e volume próprios.
 - **Simples:** instala em segundos e não precisa criar conta.
 

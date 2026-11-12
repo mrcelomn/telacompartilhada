@@ -97,6 +97,11 @@
   .av, #membros .av { width:22px; height:22px; border-radius:50%; background:var(--sup2); border:1px solid var(--borda); display:grid; place-items:center; font-size:11px; font-weight:600; color:var(--mut); flex:none; }
   #membros .tag { margin-left:auto; font-size:10px; color:var(--mut); }
   #membros .ao-vivo { color:var(--red); }
+  #membros .cam { color:var(--grn); display:grid; }
+  #membros .tag + .cam { margin-left:4px; }
+  #membros .cam svg { width:13px; height:13px; }
+  .camBox video { aspect-ratio:16/9; object-fit:cover; }
+  video.espelho { transform:scaleX(-1); }
   .nomeSala { font-weight:600; }
   .nomeSala small { color:var(--mut); font-weight:400; margin-left:6px; }
 
@@ -115,6 +120,7 @@
     <span class="nomeSala" id="txtSala"></span>
     <span class="sep"></span>
     <button id="btnTela" class="grn">Compartilhar</button>
+    <button id="btnCam" class="fantasma">Câmera</button>
     <button id="btnSair" class="fantasma">Sair</button>
   </div>
 </header>
@@ -147,10 +153,11 @@
     <div id="barraStatus"><span class="ponto"></span><span id="status"></span></div>
     <div id="vazio"><div>
       <h2>Ninguém está transmitindo</h2>
-      <div>Clique em <b>Compartilhar</b> e escolha uma janela.<br>Só o som daquele programa vai junto.</div>
+      <div>Clique em <b>Compartilhar</b> e escolha uma janela.<br>Só o som daquele programa vai junto.<br>Ou ligue sua <b>Câmera</b>.</div>
     </div></div>
     <main id="main">
       <div class="box oculto" id="boxLocal"><span>Você está transmitindo</span><video id="vidLocal" autoplay muted></video></div>
+      <div class="box camBox oculto" id="boxCam"><span>Sua câmera</span><video id="vidCam" class="espelho" autoplay muted></video></div>
     </main>
   </div>
   <aside>
