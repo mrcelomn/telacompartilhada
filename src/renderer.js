@@ -3,14 +3,19 @@ const status = t => $('status').textContent = t;
 const SVG = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const ICONE_SOM = SVG('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>');
 const ICONE_MUDO = SVG('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>');
+const ICONE_CAM = SVG('<path d="m16 13 5.2 3.5a.5.5 0 0 0 .8-.4V7.9a.5.5 0 0 0-.8-.4L16 11"/><rect x="2" y="6" width="14" height="12" rx="2"/>');
+const ICONE_CAM_OFF = SVG('<path d="M10.7 6H14a2 2 0 0 1 2 2v3.3l1 1L22 7v10"/><path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/><path d="m2 2 20 20"/>');
 
 // ---------- estado ----------
 let peer = null, souHost = false, hostConn = null, nomeSala = '', meuNome = '';
 const membros = new Map();   // (só no host) peerId -> { nome, conn, transmitindo }
 let lista = [];              // [{ id, nome, host, transmitindo }]
-let telaStream = null;
-const chamadas = new Map();  // peerId -> chamada saindo (minha transmissão)
-const remotos = new Map();   // peerId -> { box, audio }
+let telaStream = null, camStream = null;
+const chamadas = new Map();     // peerId -> chamada saindo (minha tela)
+const chamadasCam = new Map();  // peerId -> chamada saindo (minha câmera)
+const remotos = new Map();      // 'peerId:tela' | 'peerId:cam' -> { box, audio, video }
+const chave = (id, tipo) => id + ':' + tipo;
+const doRemoto = k => { const i = k.lastIndexOf(':'); return [k.slice(0, i), k.slice(i + 1)]; };
 let audioCtx, worklet;
 
 const slug = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -98,7 +103,7 @@ function abrirSala() {
 
 $('btnSair').onclick = () => sair('');
 function sair(msg) {
-  pararTela();
+  pararTela(); pararCamera();
   for (const id of [...remotos.keys()]) fecharRemoto(id);
   peer?.destroy(); peer = null; hostConn = null; souHost = false; membros.clear(); lista = [];
   document.body.classList.remove('conectado');
@@ -109,13 +114,14 @@ function sair(msg) {
 // ---------- host: controla quem está na sala ----------
 function aceitarMembro(c) {
   c.on('data', m => {
-    if (m.t === 'ola') { membros.set(c.peer, { nome: String(m.nome).slice(0, 24), conn: c, transmitindo: false }); enviarLista(); }
+    if (m.t === 'ola') { membros.set(c.peer, { nome: String(m.nome).slice(0, 24), conn: c, transmitindo: false, camera: false }); enviarLista(); }
     if (m.t === 'transmitindo' && membros.has(c.peer)) { membros.get(c.peer).transmitindo = !!m.on; enviarLista(); }
+    if (m.t === 'camera' && membros.has(c.peer)) { membros.get(c.peer).camera = !!m.on; enviarLista(); }
   });
   c.on('close', () => { membros.delete(c.peer); enviarLista(); });
 }
 function enviarLista() {
-  const l = [...membros].map(([id, m]) => ({ id, nome: m.nome, host: id === peer.id, transmitindo: m.transmitindo }));
+  const l = [...membros].map(([id, m]) => ({ id, nome: m.nome, host: id === peer.id, transmitindo: m.transmitindo, camera: !!m.camera }));
   for (const m of membros.values()) if (m.conn?.open) m.conn.send({ t: 'lista', membros: l });
   aplicarLista(l);
 }
@@ -123,18 +129,28 @@ function avisarTransmissao(on) {
   if (souHost) { membros.get(peer.id).transmitindo = on; enviarLista(); }
   else if (hostConn?.open) hostConn.send({ t: 'transmitindo', on });
 }
+function avisarCamera(on) {
+  if (souHost) { membros.get(peer.id).camera = on; enviarLista(); }
+  else if (hostConn?.open) hostConn.send({ t: 'camera', on });
+}
 
 // ---------- lista de membros ----------
 function aplicarLista(l) {
   lista = l;
   const ids = new Set(l.map(m => m.id));
-  // quem saiu ou parou de transmitir
-  for (const id of [...remotos.keys()]) { const m = l.find(x => x.id === id); if (!m || !m.transmitindo) fecharRemoto(id); }
-  for (const [id, ch] of chamadas) if (!ids.has(id)) { ch.close(); chamadas.delete(id); }
-  // se estou transmitindo, mando pra quem chegou agora
-  if (telaStream) for (const m of l) if (m.id !== peer.id && !chamadas.has(m.id)) ligar(m.id);
+  // quem saiu ou parou de transmitir / desligou a câmera
+  for (const k of [...remotos.keys()]) {
+    const [id, tipo] = doRemoto(k), m = l.find(x => x.id === id);
+    if (!m || !(tipo === 'cam' ? m.camera : m.transmitindo)) fecharRemoto(k);
+  }
+  for (const mapa of [chamadas, chamadasCam]) for (const [id, ch] of mapa) if (!ids.has(id)) { ch.close(); mapa.delete(id); }
+  // se estou transmitindo / com câmera, mando pra quem chegou agora
+  for (const m of l) if (m.id !== peer.id) {
+    if (telaStream && !chamadas.has(m.id)) ligar(m.id);
+    if (camStream && !chamadasCam.has(m.id)) ligarCam(m.id);
+  }
   desenharMembros();
-  for (const [id, r] of remotos) { const m = l.find(x => x.id === id); if (m) r.box.querySelector('span').textContent = m.nome; }
+  for (const [k, r] of remotos) { const [id, tipo] = doRemoto(k), m = l.find(x => x.id === id); if (m) r.box.querySelector('span').textContent = rotulo(m.nome, tipo); }
 }
 function desenharMembros() {
   const ul = $('membros'); ul.innerHTML = '';
@@ -144,22 +160,27 @@ function desenharMembros() {
     const nm = document.createElement('span'); nm.textContent = m.nome + (m.id === peer?.id ? ' (você)' : '');
     const tag = document.createElement('span'); tag.className = 'tag' + (m.transmitindo ? ' ao-vivo' : '');
     tag.textContent = m.transmitindo ? 'ao vivo' : (m.host ? 'dono' : '');
-    li.append(av, nm, tag); ul.appendChild(li);
+    li.append(av, nm, tag);
+    if (m.camera) { const c = document.createElement('span'); c.className = 'cam'; c.title = 'Câmera ligada'; c.innerHTML = ICONE_CAM; li.appendChild(c); }
+    ul.appendChild(li);
   }
 }
 
 // ---------- receber transmissões ----------
 function configurarChamadas() {
   peer.on('call', call => {
+    const tipo = call.metadata?.tipo === 'cam' ? 'cam' : 'tela';
     call.answer();
-    call.on('stream', s => mostrarRemoto(call.peer, s));
-    call.on('close', () => fecharRemoto(call.peer));
+    call.on('stream', s => mostrarRemoto(call.peer, tipo, s));
+    call.on('close', () => fecharRemoto(chave(call.peer, tipo)));
   });
 }
-function mostrarRemoto(id, stream) {
-  let r = remotos.get(id);
+const rotulo = (nome, tipo) => tipo === 'cam' ? nome + ' (câmera)' : nome;
+function mostrarRemoto(id, tipo, stream) {
+  const k = chave(id, tipo);
+  let r = remotos.get(k);
   if (!r) {
-    const box = document.createElement('div'); box.className = 'box';
+    const box = document.createElement('div'); box.className = 'box' + (tipo === 'cam' ? ' camBox' : '');
     box.innerHTML = `<span></span><video autoplay muted></video><div class="ctrl"><button class="fantasma"></button><input type="range" min="0" max="100" value="100" title="Volume"></div>`;
     const audio = new Audio(); audio.autoplay = true;
     const btn = box.querySelector('button'), vol = box.querySelector('input'), video = box.querySelector('video');
@@ -168,17 +189,53 @@ function mostrarRemoto(id, stream) {
     vol.oninput = () => { audio.volume = vol.value / 100; if (vol.value > 0) audio.muted = false; atualizar(); };
     video.ondblclick = () => video.requestFullscreen();
     atualizar();
+    if (tipo === 'cam') box.querySelector('.ctrl').remove();   // câmera vai sem som
     $('main').prepend(box);
-    r = { box, audio, video }; remotos.set(id, r);
+    r = { box, audio, video }; remotos.set(k, r);
   }
-  r.box.querySelector('span').textContent = lista.find(m => m.id === id)?.nome || 'Transmissão';
+  const nome = lista.find(m => m.id === id)?.nome;
+  r.box.querySelector('span').textContent = nome ? rotulo(nome, tipo) : (tipo === 'cam' ? 'Câmera' : 'Transmissão');
   r.video.srcObject = stream;
   r.audio.srcObject = stream.getAudioTracks().length ? new MediaStream(stream.getAudioTracks()) : null;
   ajustarLayout();
 }
-function fecharRemoto(id) {
-  const r = remotos.get(id); if (!r) return;
-  r.video.srcObject = null; r.audio.srcObject = null; r.box.remove(); remotos.delete(id); ajustarLayout();
+function fecharRemoto(k) {
+  const r = remotos.get(k); if (!r) return;
+  r.video.srcObject = null; r.audio.srcObject = null; r.box.remove(); remotos.delete(k); ajustarLayout();
+}
+
+// ---------- câmera ----------
+$('btnCam').innerHTML = ICONE_CAM + 'Câmera';
+$('btnCam').onclick = async () => {
+  if (camStream) return pararCamera();
+  $('btnCam').disabled = true;
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } });
+  } catch (e) {
+    console.error(e); camStream = null; $('btnCam').disabled = false;
+    return status(e.name === 'NotFoundError' ? 'Nenhuma câmera encontrada neste PC.' : 'Não deu pra abrir a câmera (' + e.name + '). Veja se outro programa está usando ela.');
+  }
+  $('btnCam').disabled = false;
+  camStream.getVideoTracks()[0].onended = pararCamera;
+  $('vidCam').srcObject = camStream;
+  $('boxCam').classList.remove('oculto'); ajustarLayout();
+  for (const m of lista) if (m.id !== peer.id) ligarCam(m.id);
+  avisarCamera(true);
+  $('btnCam').innerHTML = ICONE_CAM_OFF + 'Desligar câmera'; $('btnCam').className = 'red';
+  status('Sua câmera está ligada.');
+};
+function ligarCam(id) { chamadasCam.set(id, peer.call(id, camStream, { metadata: { nome: meuNome, tipo: 'cam' } })); }
+function pararCamera() {
+  if (!camStream) return;
+  camStream.getTracks().forEach(t => t.stop());
+  camStream = null;
+  for (const ch of chamadasCam.values()) ch.close();
+  chamadasCam.clear();
+  if (peer) avisarCamera(false);
+  $('vidCam').srcObject = null;
+  $('boxCam').classList.add('oculto'); ajustarLayout();
+  $('btnCam').innerHTML = ICONE_CAM + 'Câmera'; $('btnCam').className = 'fantasma';
+  status('Câmera desligada.');
 }
 
 // ---------- transmitir ----------
@@ -222,7 +279,7 @@ async function compartilhar(f) {
   $('btnTela').textContent = 'Parar'; $('btnTela').className = 'red';
   status('Transmitindo "' + f.name + '"' + (temSom ? ' com o som só desse programa.' : ' sem som.'));
 }
-function ligar(id) { chamadas.set(id, peer.call(id, telaStream, { metadata: { nome: meuNome } })); }
+function ligar(id) { chamadas.set(id, peer.call(id, telaStream, { metadata: { nome: meuNome, tipo: 'tela' } })); }
 
 // Áudio do programa: PCM 48kHz 16-bit estéreo vindo do audio-app.exe -> track WebRTC
 // (ScriptProcessor em vez de AudioWorklet: worklet não carrega em página file://)
@@ -262,7 +319,7 @@ function pararTela() {
   telaStream = null;
   for (const ch of chamadas.values()) ch.close();
   chamadas.clear();
-  avisarTransmissao(false);
+  if (peer) avisarTransmissao(false);
   $('vidLocal').srcObject = null;
   $('boxLocal').classList.add('oculto'); ajustarLayout();
   $('btnTela').textContent = 'Compartilhar'; $('btnTela').className = 'grn';
