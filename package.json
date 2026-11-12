@@ -36,7 +36,7 @@
       "oneClick": true,
       "perMachine": false,
       "runAfterFinish": true,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "Tela Compartilhada",
       "artifactName": "TelaCompartilhada-Setup.exe",
